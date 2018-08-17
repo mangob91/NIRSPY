@@ -1,3 +1,2 @@
 # NIRSPY
-This is my own written python package for my research project in brain analysis.
-I will continue to update package.
+On going project under professor Xiaofu He @ Columbia University Medical Center.
