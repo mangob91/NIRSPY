@@ -4,6 +4,7 @@ Created on Mon Jul 23 16:08:32 2018
 
 @author: leeyo
 """
+
 import os
 import numpy as np
 import scipy.io as sio
@@ -31,8 +32,8 @@ def check_Path(dataPath):
 
 def remove_trend(data, cof, p_degree):
     y = np.zeros(data.shape)
-    row = data.shape[0]
-    col = data.shape[1]
+    row = data.shape[0] #time point
+    col = data.shape[1] #channel
     for j in range(col):
         for i in range(row):
             y[i,j] = np.dot(calculate_trend(i, p_degree), cof[:,j])
@@ -134,7 +135,7 @@ class NIRSPY_preprocessing:
         else:
             raise Exception('Sampling rate is already set')
     def normalize(self, features_orig, features_new, interval, time):
-        # this one is based on page 1 (Lapborisuth 2017)
+        # this one is based on (page 3 of Lapborisuth 2017)
         num_tp = round(interval * self._sampling_rate)
         # num_tp means number of time points
         time_loc = round(time * self._sampling_rate)
@@ -147,6 +148,7 @@ class NIRSPY_preprocessing:
             sigma_prev = temp.std()
             return (features_new - avg_prev)/sigma_prev
     def feature_extraction(self, features):
+        #reference: equation 1 of Robinson2016.pdf
         # given array, extracts time averages of change
         tp = math.ceil(self.get_Hz())
         row = features.shape[0]
@@ -164,7 +166,10 @@ class NIRSPY_preprocessing:
         label = self.feature_extraction(labels)
         label[label > 0] = 1
         return label
-    
+
+    #reference:Baseline drift was modeled and removed using a polynomial of
+    #the fourth degree, i.e., page 4 of Lapborisuth2017.pdf
+    #for raw time points data
     def baseline_drift(self, data, degree = None):
         if degree is None:
             degree = 4
@@ -173,11 +178,12 @@ class NIRSPY_preprocessing:
         cof = np.apply_along_axis(poly_fit, 0, data, degree)
         drift_removed = remove_trend(data, cof, p_degree)
         return drift_removed
-    
+
+    #reference: based on mutul informaiton, i.e., equations 3 & 4 of Robinson2016.pdf
     def feature_selection(self, data, target_label, num_channels):
-        mutual_info = mutual_info_classif(data, target_label)
-        sorted_index = mutual_info.argsort()
-        return data[:,sorted_index[-num_channels:]]
+        mutual_info = mutual_info_classif(data, target_label) #for returned value, the larger, the better
+        sorted_index = mutual_info.argsort() #asending
+        return data[:,sorted_index[-num_channels:]] #starting from the last one
     
     #def wavelet_MDL(self, data):
         # Wavelet Minimum Description Length technique to detrend signals
@@ -186,13 +192,15 @@ class NIRSPY_analysis:
     
     def __init__(self, num_split):
         self.num_split = num_split
-        self.s_active = 0
+        self.s_rest = 0
         
     def set_num_Split(self, num_split):
         self.num_split = num_split
         
     def get_num_Split(self, num_split):
         return self.num_split
+
+    #find a link???
     def time_series_split(self, data, label):
         # returns a dictionary containing time series splitted data
         tscv = TimeSeriesSplit(n_splits = self.num_split)
@@ -204,11 +212,11 @@ class NIRSPY_analysis:
             Y_train[key], Y_test[key] = label[train_index], label[test_index]
             key+=1
         return X_train, X_test, Y_train, Y_test
-    def set_active(self, index):
-        self.s_active = index
+    def set_rest(self, index):
+        self.s_rest = index
         
-    def get_active(self):
-        return self.s_active
+    def get_rest(self):
+        return self.s_rest
     
     def bootStrapping(self, data, class_ratio, bs_active, bs_rest):
         #batch_size = bs_active + bs_rest
@@ -219,26 +227,24 @@ class NIRSPY_analysis:
             raise Exception("Class ratios don't add up to 1")
         num_classes = len(class_ratio) # number of classes
         sorted_data = data_sorting(data, num_classes)
-        queue = MyCircularQueue(sorted_data[1].shape[0])
-        for k in range(sorted_data[1].shape[0]):
+        queue = MyCircularQueue(sorted_data[0].shape[0])
+        for k in range(sorted_data[0].shape[0]):
             queue.enqueue(k)
         # sorted_data is a map key ranging from 0 to num_classes. This corresponds to n_active, n_rest etc.
         # calculating S_resting, S_active. etc
-        #queue_active = queue.Queue(sorted_data[1].shape[0])
+        # queue_active = queue.Queue(sorted_data[1].shape[0])
         result = np.array([], dtype = np.float64).reshape(0,data.shape[1])
-        for i in range(3):
-            # pick S_active sequentially
-            s_active = self.pick_active(queue, sorted_data[1], self.get_active(), bs_active)
-            s_rest = data_sampling(sorted_data[0], bs_rest)
-            combined = np.vstack((s_active, s_rest))
-            result = np.vstack((result, combined))
+        # pick S_active sequentially
+        s_rest = self.pick_rest(queue, sorted_data[0], self.get_rest(), bs_rest)
+        s_active = data_sampling(sorted_data[1], bs_active)
+        combined = np.vstack((s_rest, s_active))
+        result = np.vstack((result, combined))
         return result
     
-    def pick_active(self, queue, s_active_data, index, s_active_size):
-        result = np.zeros((s_active_size, s_active_data.shape[1]), dtype = np.float64)
-        for i in range(s_active_size):
+    def pick_rest(self, queue, s_rest_data, index, s_rest_size):
+        result = np.zeros((s_rest_size, s_rest_data.shape[1]), dtype = np.float64)
+        for i in range(s_rest_size):
             temp = queue.dequeue()
-            result[i] = s_active_data[temp]
+            result[i] = s_rest_data[temp]
             queue.enqueue(temp)   
         return result
-
