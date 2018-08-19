@@ -4,13 +4,12 @@ Created on Mon Jul 23 16:08:32 2018
 
 @author: leeyo
 """
-
 import os
 import numpy as np
 import scipy.io as sio
 import math
 from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import Normalizer
+from sklearn.preprocessing import normalize
 from sklearn.feature_selection import mutual_info_classif 
 from sklearn.model_selection import TimeSeriesSplit
 from MyCircularQueue import MyCircularQueue
@@ -109,8 +108,7 @@ class NIRSPY_basic:
         
     def normalize(self, features):
         # This is just standard normalizer
-        scaler = Normalizer.fit(features)
-        normalized_features = scaler.transform(features)
+        normalized_features = normalize(features)
         return normalized_features
     
     def standardize(self, features):
@@ -201,14 +199,16 @@ class NIRSPY_analysis:
         return self.num_split
 
     #find a link???
-    def time_series_split(self, data, label):
+    def time_series_split(self, data):
+        feature = data[:,:-1]
+        label = data[:,-1]
         # returns a dictionary containing time series splitted data
         tscv = TimeSeriesSplit(n_splits = self.num_split)
         X_train, X_test = {},{}
         Y_train, Y_test = {},{}
         key = 0
         for train_index, test_index in tscv.split(data):
-            X_train[key], X_test[key] = data[train_index], data[test_index]
+            X_train[key], X_test[key] = feature[train_index], feature[test_index]
             Y_train[key], Y_test[key] = label[train_index], label[test_index]
             key+=1
         return X_train, X_test, Y_train, Y_test
@@ -218,8 +218,9 @@ class NIRSPY_analysis:
     def get_rest(self):
         return self.s_rest
     
-    def bootStrapping(self, data, class_ratio, bs_active, bs_rest):
-        #batch_size = bs_active + bs_rest
+    def bootStrapping(self, data, class_ratio, n_min_batch):
+        bs_active, bs_rest = round(class_ratio[1] * n_min_batch), round(class_ratio[0] * n_min_batch)
+        # batch_size = bs_active + bs_rest
         # This function is based on bootstrapping given by professor Xiaofu He
         # data and ratio between class, for example, [0.5,0.5] or 0.5 class 0 and 0.5 class 1
         # expects data containing features and label (label assumed to be the last column)
@@ -239,7 +240,9 @@ class NIRSPY_analysis:
         s_active = data_sampling(sorted_data[1], bs_active)
         combined = np.vstack((s_rest, s_active))
         result = np.vstack((result, combined))
-        return result
+        X = result[:,:-1]
+        y = result[:,-1].astype(np.int64)
+        return X,y
     
     def pick_rest(self, queue, s_rest_data, index, s_rest_size):
         result = np.zeros((s_rest_size, s_rest_data.shape[1]), dtype = np.float64)
