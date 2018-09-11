@@ -14,13 +14,23 @@ from sklearn.feature_selection import mutual_info_classif
 from sklearn.model_selection import TimeSeriesSplit
 from MyCircularQueue import MyCircularQueue
 
-def data_sorting(data, num_classes):
-    # creating a map sorting by its classes
-    range_keys = list(range(0,num_classes))
-    sorted_classes = dict.fromkeys(range_keys)
-    for i in range_keys:
-        sorted_classes[i] = data[data[:,-1] == i]
-    return sorted_classes
+def parsing_optode_pos(dataPath):
+    with open(dataPath, 'r') as f:
+        source_coord = np.empty((0,3), type = np.float64)
+        detect_coord = np.empty((0,3), type = np.float64)
+        for i, line in enumerate(f):
+            if 'S' in line:
+                # then source
+                temp_source = line.split(',')
+                source_index = int(temp_source[0][1])
+                source_coord = np.vstack((source_coord,[list(float(x) for x in temp_source[1:])]))
+            elif 'D' in line:
+                # then detector
+                temp_detector = line.split(',')
+                det_index = int(temp_detector[0][1])
+                
+                
+                
 
 def data_sampling(data, size):
     # expects data to be an array
@@ -183,14 +193,44 @@ class NIRSPY_preprocessing:
         sorted_index = mutual_info.argsort() #asending
         return data[:,sorted_index[-num_channels:]] #starting from the last one
     
-    #def wavelet_MDL(self, data):
+    def transform_1D_2D(self, ch_config, optode_pos):
+        # this function reads pos information and reorder 1D vector to 2D mesh
+        # reference Zhang 2018
+        with open(optode_pos,'r') as f:
+            coordinates = {} #result_ch
+            for line in f:
+                temp = [x.strip() for x in line.split(',')]
+                if 'S' in temp[0] or 'D' in temp[0]:
+                    # source
+                    coordinates[temp[0]] = list(map(float, temp[1:]))  
+        with open(ch_config, 'r') as f:
+            pair_info = {} #result
+            for line2 in f:
+                temp2 = [y.strip() for y in line2.split(',')]
+                if 'Ch' in temp2[0]:
+                    continue
+                else:
+                    pair_info[int(temp2[0])] = list(temp2[1:])
+        channel_coordinates = np.zeros((len(pair_info.keys()),3))
+        for key, val in pair_info.items():
+            # val[0] = source and val[1] = detector
+            source = 'S' + val[0]
+            detect = 'D' + val[1]
+            temp =  [a+b for a, b in zip(coordinates[source], coordinates[detect])]
+            # finding average of given two coordinates (source and detector) which corresponds to channel location
+            # MATLAB function spm_fnirs_read_pos.m line 81 ~
+            channel_coordinates[key - 1] = [x/2 for x in temp]
+            #def wavelet_MDL(self, data):
         # Wavelet Minimum Description Length technique to detrend signals
-
+        return channel_coordinates
+    
 class NIRSPY_analysis:
     
     def __init__(self, num_split):
         self.num_split = num_split
         self.s_rest = 0
+        self.sorted_data = []
+        self.sorted = False
         
     def set_num_Split(self, num_split):
         self.num_split = num_split
@@ -227,21 +267,22 @@ class NIRSPY_analysis:
         if sum(class_ratio) != 1:
             raise Exception("Class ratios don't add up to 1")
         num_classes = len(class_ratio) # number of classes
-        sorted_data = data_sorting(data, num_classes)
-        queue = MyCircularQueue(sorted_data[0].shape[0])
-        for k in range(sorted_data[0].shape[0]):
+        if self.sorted is False:
+            self.sorted_data = self.data_sorting(data, num_classes)
+        queue = MyCircularQueue(self.sorted_data[0].shape[0])
+        for k in range(self.sorted_data[0].shape[0]):
             queue.enqueue(k)
         # sorted_data is a map key ranging from 0 to num_classes. This corresponds to n_active, n_rest etc.
         # calculating S_resting, S_active. etc
         # queue_active = queue.Queue(sorted_data[1].shape[0])
         result = np.array([], dtype = np.float64).reshape(0,data.shape[1])
         # pick S_active sequentially
-        s_rest = self.pick_rest(queue, sorted_data[0], self.get_rest(), bs_rest)
-        s_active = data_sampling(sorted_data[1], bs_active)
+        s_rest = self.pick_rest(queue, self.sorted_data[0], self.get_rest(), bs_rest)
+        s_active = data_sampling(self.sorted_data[1], bs_active)
         combined = np.vstack((s_rest, s_active))
         result = np.vstack((result, combined))
         X = result[:,:-1]
-        y = result[:,-1].astype(np.int64)
+        y = result[:,-1].astype(np.int8)
         return X,y
     
     def pick_rest(self, queue, s_rest_data, index, s_rest_size):
@@ -251,3 +292,12 @@ class NIRSPY_analysis:
             result[i] = s_rest_data[temp]
             queue.enqueue(temp)   
         return result
+    
+    def data_sorting(self, data, num_classes):
+    # creating a map sorting by its classes
+        range_keys = list(range(0,num_classes))
+        sorted_classes = dict.fromkeys(range_keys)
+        for i in range_keys:
+            sorted_classes[i] = data[data[:,-1] == i]
+        self.sorted = True
+        return sorted_classes
