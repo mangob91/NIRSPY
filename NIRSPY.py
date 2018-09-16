@@ -193,6 +193,24 @@ class NIRSPY_preprocessing:
         sorted_index = mutual_info.argsort() #asending
         return data[:,sorted_index[-num_channels:]] #starting from the last one
     
+    def swap_columns(self, data, order):
+        i = 0
+        nrow, ncol = data.shape[0], data.shape[1]
+        results = np.zeros([nrow, ncol])
+        for i in range(16):
+            results[:,i] = data[:, order[i]]
+        return results
+           
+    def temp_1D_2D_transform(self, data):
+        # this function will transform time points * channel data into time_points, 4, 4, 1
+        time_points = data.shape[0]
+        order = [2,0,6,4,3,1,7,5,9,8,14,12,10,11,15,13]
+        col_swapped_data = self.swap_columns(data, order)
+        transformed_data = np.zeros([time_points,4,4,1])
+        for i in range(time_points):
+            transformed_data[i] = col_swapped_data[i].reshape([1,4,4,1])
+        return transformed_data
+        
     def transform_1D_2D(self, ch_config, optode_pos):
         # this function reads pos information and reorder 1D vector to 2D mesh
         # reference Zhang 2018
