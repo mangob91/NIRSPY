@@ -256,7 +256,7 @@ class NIRSPY_analysis:
     def get_num_Split(self, num_split):
         return self.num_split
 
-    #find a link???
+    
     def time_series_split(self, data):
         feature = data[:,:-1]
         label = data[:,-1]
