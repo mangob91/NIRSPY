@@ -200,7 +200,49 @@ class NIRSPY_preprocessing:
         for i in range(16):
             results[:,i] = data[:, order[i]]
         return results
-           
+    
+    def sliding_window(self, data, label_input, window_size = 4, overlap = 0.5):
+        # for example, if there is 4409 data, then 50% overlap and slide window to create time information
+        nrow = data.shape[0] # could be 4409 ~ 7800
+        mesh_width, mesh_height = data.shape[1], data.shape[2] # 4 by 4 right now
+        n_sample = int(data.shape[0]/(window_size*overlap)) # At max, will be used for memory preallocation
+        results = np.zeros((n_sample, window_size, mesh_width, mesh_height)) # for example, if n_sample is 3000 then (3000 X 4 X 4 X 4)
+        labels = np.empty((n_sample,))
+        i = int(0) # for output results
+        j = int(0) # for features or data
+        k = int(0) # for label
+        skipped = int(0)
+        while True:
+            if (j*2 + window_size > nrow):
+            # don't include features that goes beyond dimension
+                break
+            if len(np.unique(label_input[j*2: (j*2) + window_size])) > 1:
+            # contains overlapping classes
+                skipped += 1
+                j+=1
+                continue
+            else:
+                results[i] = data[j*2:(j*2) + window_size,:,:]
+                labels[k:k+window_size] = label_input[j*2:(j*2)+window_size] 
+                i+=1
+                k+=1
+                j+=1
+        results, labels = results[:-skipped+1], labels[:-skipped+1]
+        return results, labels
+
+# =============================================================================
+# 
+#     def sliding_window_label(self, label, window_size = 4, overlap = 0.5):
+#         # while sliding with overlap, if there exists class conflicts, this will simply remove that sample
+#         nrow = len(label)
+#         data_drop_row = int(nrow % window_size)
+#         label = label[:-data_drop_row]
+#         n_sample = int(nrow/[window_size * overlap])
+#         results = np.zeros((n_sample,1))
+#         for i in range(n_sample):
+#             temp = label[i*2:(i*2)+window_size]
+#            
+# =============================================================================
     def temp_1D_2D_transform(self, data):
         # this function will transform time points * channel data into time_points, 4, 4, 1
         time_points = data.shape[0]
@@ -256,7 +298,7 @@ class NIRSPY_analysis:
     def get_num_Split(self, num_split):
         return self.num_split
 
-    
+    #find a link???
     def time_series_split(self, data):
         feature = data[:,:-1]
         label = data[:,-1]
