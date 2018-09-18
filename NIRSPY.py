@@ -114,7 +114,7 @@ class NIRSPY_basic:
             print('File extension is .mat, load_Data_m is being called instead')
             self.load_Data_m(dataPath)
         else:
-            return np.genfromtxt(dataPath, delimiter = ',')
+            return np.genfromtxt(dataPath, delimiter = ',').astype(np.float32)
         
     def normalize(self, features):
         # This is just standard normalizer
@@ -185,7 +185,7 @@ class NIRSPY_preprocessing:
         p_degree = list(range(degree, 0, -1))
         cof = np.apply_along_axis(poly_fit, 0, data, degree)
         drift_removed = remove_trend(data, cof, p_degree)
-        return drift_removed
+        return drift_removed.astype(np.float32)
 
     #reference: based on mutul informaiton, i.e., equations 3 & 4 of Robinson2016.pdf
     def feature_selection(self, data, target_label, num_channels):
@@ -228,7 +228,7 @@ class NIRSPY_preprocessing:
                 k+=1
                 j+=1
         results, labels = results[:-skipped+1], labels[:-skipped+1]
-        return results, labels
+        return results.reshape((len(results), window_size, mesh_width, mesh_height, 1)).astype(np.float32), labels.astype(np.float32)
 
 # =============================================================================
 # 
@@ -251,7 +251,7 @@ class NIRSPY_preprocessing:
         transformed_data = np.zeros([time_points,4,4,1])
         for i in range(time_points):
             transformed_data[i] = col_swapped_data[i].reshape([1,4,4,1])
-        return transformed_data
+        return transformed_data.astype(np.float32)
         
     def transform_1D_2D(self, ch_config, optode_pos):
         # this function reads pos information and reorder 1D vector to 2D mesh
@@ -341,7 +341,7 @@ class NIRSPY_analysis:
         s_active = data_sampling(self.sorted_data[1], bs_active)
         combined = np.vstack((s_rest, s_active))
         result = np.vstack((result, combined))
-        X = result[:,:-1]
+        X = result[:,:-1].astype(np.float32)
         y = result[:,-1].astype(np.int8)
         return X,y
     
@@ -351,7 +351,7 @@ class NIRSPY_analysis:
             temp = queue.dequeue()
             result[i] = s_rest_data[temp]
             queue.enqueue(temp)   
-        return result
+        return result.astype(np.float32)
     
     def data_sorting(self, data, num_classes):
     # creating a map sorting by its classes
@@ -360,4 +360,4 @@ class NIRSPY_analysis:
         for i in range_keys:
             sorted_classes[i] = data[data[:,-1] == i]
         self.sorted = True
-        return sorted_classes
+        return sorted_classes.astype(np.float32)
