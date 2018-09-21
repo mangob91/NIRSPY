@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import normalize
 from sklearn.feature_selection import mutual_info_classif 
 from sklearn.model_selection import TimeSeriesSplit
+from sklearn.model_selection import train_test_split
 from MyCircularQueue import MyCircularQueue
 
 def parsing_optode_pos(dataPath):
@@ -114,7 +115,7 @@ class NIRSPY_basic:
             print('File extension is .mat, load_Data_m is being called instead')
             self.load_Data_m(dataPath)
         else:
-            return np.genfromtxt(dataPath, delimiter = ',').astype(np.float32)
+            return np.genfromtxt(dataPath, delimiter = ',')
         
     def normalize(self, features):
         # This is just standard normalizer
@@ -185,7 +186,7 @@ class NIRSPY_preprocessing:
         p_degree = list(range(degree, 0, -1))
         cof = np.apply_along_axis(poly_fit, 0, data, degree)
         drift_removed = remove_trend(data, cof, p_degree)
-        return drift_removed.astype(np.float32)
+        return drift_removed
 
     #reference: based on mutul informaiton, i.e., equations 3 & 4 of Robinson2016.pdf
     def feature_selection(self, data, target_label, num_channels):
@@ -228,7 +229,7 @@ class NIRSPY_preprocessing:
                 k+=1
                 j+=1
         results, labels = results[:-skipped+1], labels[:-skipped+1]
-        return results.reshape((len(results), window_size, mesh_width, mesh_height, 1)).astype(np.float32), labels.astype(np.float32)
+        return results.reshape((len(results), window_size, mesh_width, mesh_height, 1)), labels
 
 # =============================================================================
 # 
@@ -243,6 +244,7 @@ class NIRSPY_preprocessing:
 #             temp = label[i*2:(i*2)+window_size]
 #            
 # =============================================================================
+    
     def temp_1D_2D_transform(self, data):
         # this function will transform time points * channel data into time_points, 4, 4, 1
         time_points = data.shape[0]
@@ -251,7 +253,7 @@ class NIRSPY_preprocessing:
         transformed_data = np.zeros([time_points,4,4,1])
         for i in range(time_points):
             transformed_data[i] = col_swapped_data[i].reshape([1,4,4,1])
-        return transformed_data.astype(np.float32)
+        return transformed_data
         
     def transform_1D_2D(self, ch_config, optode_pos):
         # this function reads pos information and reorder 1D vector to 2D mesh
@@ -284,6 +286,25 @@ class NIRSPY_preprocessing:
         # Wavelet Minimum Description Length technique to detrend signals
         return channel_coordinates
     
+    def Pipeline_2DCNN_ME_MI(self, data_ME, data_MI, np_basic, poly_degree = 4, test_size = 0.3, random_state = 42):
+        # accepts data (HbO_ME and HbO_MI) and performs conventional pipeline: baseline drift, normalization and 1D - 2D transform
+        # First step, extracts and converts data ME's label corresponding to 1 and replace them with 0
+        ME_only = data_ME[data_ME[:,-1] == 1]
+        ME_only[:,-1] = 0
+        MI_only = data_MI[data_MI[:,-1] == 1]
+        # combine two datasets
+        stacked_MI_ME = np.vstack((ME_only, MI_only))
+        features, labels = stacked_MI_ME[:,:-1], stacked_MI_ME[:,-1]
+        X_train, X_test, y_train, y_test = train_test_split(features, labels, test_size= test_size, random_state= random_state)
+        row, col = X_train.shape
+        processed_MI_ME_train = np_basic.standardize(self.baseline_drift(X_train, poly_degree)) #poly degrees, maximum is 4 degrees
+        processed_MI_ME_test = np_basic.standardize(self.baseline_drift(X_test, poly_degree))
+        mesh_train = self.temp_transform_1D_2D(processed_MI_ME_train)
+        mesh_test = self.temp_1D_2D_transform(processed_MI_ME_test)
+        return mesh_train, mesh_test
+        
+        
+        
 class NIRSPY_analysis:
     
     def __init__(self, num_split):
@@ -341,7 +362,7 @@ class NIRSPY_analysis:
         s_active = data_sampling(self.sorted_data[1], bs_active)
         combined = np.vstack((s_rest, s_active))
         result = np.vstack((result, combined))
-        X = result[:,:-1].astype(np.float32)
+        X = result[:,:-1]
         y = result[:,-1].astype(np.int8)
         return X,y
     
@@ -351,7 +372,7 @@ class NIRSPY_analysis:
             temp = queue.dequeue()
             result[i] = s_rest_data[temp]
             queue.enqueue(temp)   
-        return result.astype(np.float32)
+        return result
     
     def data_sorting(self, data, num_classes):
     # creating a map sorting by its classes
@@ -360,4 +381,4 @@ class NIRSPY_analysis:
         for i in range_keys:
             sorted_classes[i] = data[data[:,-1] == i]
         self.sorted = True
-        return sorted_classes.astype(np.float32)
+        return sorted_classes
