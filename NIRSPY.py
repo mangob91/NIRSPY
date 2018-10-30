@@ -125,11 +125,13 @@ class NIRSPY_basic:
     def standardize(self, features):
         scaler = StandardScaler().fit(features)
         standardized_features = scaler.transform(features)
-        return standardized_features
+        return scaler.mean_, scaler.var_, standardized_features
     
-    #def signal_processing():
+    def standardize_test(self, test_data, mean_train, var_train):
+        return np.divide(np.subtract(test_data, mean_train),np.sqrt(var_train))
+    
         
-    #def feature_selection(self):
+
 class NIRSPY_preprocessing:
     _sampling_rate = float(0)
     time = float(0)
@@ -382,3 +384,14 @@ class NIRSPY_analysis:
             sorted_classes[i] = data[data[:,-1] == i]
         self.sorted = True
         return sorted_classes
+    
+    def class_accuracy(self, y_pred, y_true, classes):
+        accuracies = [0] * len(classes)
+        total_each_class = [0] * len(classes)
+        for i, each_class in enumerate(classes):
+            accuracies[i] = sum(y_pred[y_true == each_class] == each_class)
+            total_each_class[i] = sum(y_true == each_class)
+            #if total_each_class[i] == 0:
+            #   total_each_class[i] = "N/A"
+        
+        return [x/y for x, y in zip(accuracies, total_each_class)]
